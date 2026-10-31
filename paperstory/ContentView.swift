@@ -27,6 +27,15 @@ struct ContentView: View {
                     .gesture(dragGesture(size: geo.size))
                     perforationOverlay
                         .allowsHitTesting(false)
+                    if controller.viewMode == .reading {
+                        VStack {
+                            LinearGradient(colors: [background, background.opacity(0)],
+                                           startPoint: .top, endPoint: .bottom)
+                                .frame(height: 14)
+                            Spacer(minLength: 0)
+                        }
+                        .allowsHitTesting(false)
+                    }
                     VStack {
                         Spacer(minLength: 0)
                         LinearGradient(colors: [background.opacity(0), background],
@@ -77,13 +86,19 @@ struct ContentView: View {
                 .accessibilityHidden(hasPulled)
                 .accessibilityIdentifier("reading.hint")
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 16) {
+                HStack(spacing: 8) {
                     cutButton
+                    Spacer(minLength: 0)
                     resetViewButton
+                    viewModeButton
                 }
                 VStack(spacing: 12) {
                     cutButton
-                    resetViewButton
+                    HStack(spacing: 8) {
+                        Spacer(minLength: 0)
+                        resetViewButton
+                        viewModeButton
+                    }
                 }
             }
         }
@@ -169,13 +184,39 @@ struct ContentView: View {
         Button {
             controller.resetView()
         } label: {
-            Label("視点を戻す", systemImage: "viewfinder")
-                .font(.subheadline)
-                .frame(minHeight: 44)
-                .padding(.horizontal, 12)
+            VStack(spacing: 3) {
+                Image(systemName: "viewfinder")
+                    .font(.body)
+                Text("視点")
+                    .font(.caption)
+            }
+            .frame(minWidth: 52, minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(ink)
+        .accessibilityLabel("視点を戻す")
+    }
+
+    private var viewModeButton: some View {
+        Button {
+            controller.toggleViewMode()
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: controller.viewMode == .roll ? "text.magnifyingglass" : "cylinder")
+                    .font(.body)
+                Text(controller.viewMode == .roll ? "本文" : "ロール")
+                    .font(.caption)
+            }
+            .frame(minWidth: 64, minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(ink)
+        .disabled(!controller.isReady)
+        .accessibilityLabel(controller.viewMode == .roll ? "本文表示に切り替える" : "ロール表示に切り替える")
+        .accessibilityValue(controller.viewMode == .roll ? "ロール表示" : "本文表示")
+        .accessibilityIdentifier("reading.viewMode")
     }
 
     private var perforationOverlay: some View {

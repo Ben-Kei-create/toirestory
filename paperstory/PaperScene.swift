@@ -9,6 +9,11 @@ struct PaperVertex {
     var uv: SIMD2<Float>
 }
 
+enum PaperViewMode {
+    case roll
+    case reading
+}
+
 /// RealityKit のシーン(ロール・壁・照明・紙メッシュ)と PaperWorld をつなぐ。
 @MainActor
 @Observable
@@ -20,6 +25,7 @@ final class PaperSceneController {
     private var atlasImage: CGImage?
     private var mesh: LowLevelMesh?
     private let rollPivot = Entity()
+    private let holderRoot = Entity()
     private var subscription: EventSubscription?
     private var paperTexture: TextureResource?
     private var wetLayer: WetPaintLayer?
@@ -30,6 +36,8 @@ final class PaperSceneController {
     static let maxWetLevel = 6
     private let cameraEntity = PerspectiveCamera()
     private var cameraDistance = G.cameraZ
+    private var viewportSize: CGSize = .zero
+    private(set) var viewMode: PaperViewMode = .roll
     private var cameraFocusY = G.rollY - G.initialHang + G.segmentHeight / 2
     private var edgeTime: Float = 0
     /// 視点(紙の中心まわりを回る)。0,0 が初期位置。
@@ -151,12 +159,13 @@ final class PaperSceneController {
 
         let plate = ModelEntity(mesh: .generateBox(size: [0.27, 0.12, 0.012]), materials: [metal])
         plate.position = [0, G.rollY, G.wallZ + 0.008]
-        content.add(plate)
+        holderRoot.addChild(plate)
         for sign in [Float(-1), 1] {
             let arm = ModelEntity(mesh: .generateBox(size: [0.006, 0.012, 0.05]), materials: [metal])
             arm.position = [sign * (G.width / 2 + 0.008), G.rollY, G.wallZ + 0.03]
-            content.add(arm)
+            holderRoot.addChild(arm)
         }
+        content.add(holderRoot)
     }
 
     // MARK: - 毎フレーム
@@ -328,24 +337,40 @@ final class PaperSceneController {
         return cameraTarget + SIMD3(r * sin(yaw) * cos(pitch), r * sin(pitch), r * cos(yaw) * cos(pitch))
     }
 
-    // Keep the roll in view while reserving most of the viewport for the printed paper.
+    // Both view modes use the same paper simulation and a shared camera.
     private var cameraTarget: SIMD3<Float> {
         [0, cameraFocusY, 0]
     }
 
     func updateViewport(_ size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
-        let preferredWidth = min(size.width * 0.72, 320)
+        viewportSize = size
+        let preferredWidth = viewMode == .roll ? min(size.width * 0.72, 320) : min(size.width * 0.84, 360)
         let minimumScale = G.minimumTextPoints / (G.charPitch * G.fontSizeRatio)
-        let rollAndPaperHeight = G.initialHang + G.rollRadius + 0.055
-        let sceneFitScale = Float(size.height) / rollAndPaperHeight
+        let framingHeight = viewMode == .roll ? G.initialHang + G.rollRadius + 0.055 : G.segmentHeight + 0.035
+        let sceneFitScale = Float(size.height) / framingHeight
         let pointsPerMeter = min(Float(preferredWidth) / G.width, max(minimumScale, sceneFitScale))
         let visibleHeight = Float(size.height) / pointsPerMeter
-        // Keep the holder's upper edge inside the frame, including the space reserved for ads.
-        cameraFocusY = G.rollY + 0.065 - visibleHeight / 2
+        let frameTop: Float
+        if viewMode == .roll {
+            frameTop = G.rollY + 0.065
+        } else {
+            frameTop = G.rollY - G.initialHang + G.segmentHeight + 0.015
+        }
+        cameraFocusY = frameTop - visibleHeight / 2
         let halfFOV = tan(G.fovDegrees * .pi / 360)
         cameraDistance = G.frontZ + Float(size.height) / (2 * halfFOV * pointsPerMeter)
         updateCamera()
+    }
+
+    func toggleViewMode() {
+        viewMode = viewMode == .roll ? .reading : .roll
+        rollPivot.isEnabled = viewMode == .roll
+        holderRoot.isEnabled = viewMode == .roll
+        isResettingView = false
+        yaw = 0
+        pitch = 0
+        updateViewport(viewportSize)
     }
 
     private func updateCamera() {
