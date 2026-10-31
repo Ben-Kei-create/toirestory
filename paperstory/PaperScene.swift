@@ -14,7 +14,8 @@ final class PaperSceneController {
     private typealias G = PaperGeometry
 
     let segments: [[Character]]
-    let world: PaperWorld
+    private(set) var world: PaperWorld
+    private var atlasImage: CGImage?
     private var mesh: LowLevelMesh?
     private let rollPivot = Entity()
     private var subscription: EventSubscription?
@@ -76,6 +77,7 @@ final class PaperSceneController {
             PaperPrintRenderer.renderAtlas(segments: self.segments)
         }.value
         guard let atlas else { return }
+        atlasImage = atlas
         do {
             let texture = try await TextureResource(image: atlas, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
             paperTexture = texture
@@ -403,13 +405,31 @@ final class PaperSceneController {
     }
 
     /// 「ここで切る」: 対象のミシン目を示してから切る。
-    func cutHere() {
-        guard !world.isTearing, let target = world.defaultCutTarget() else { return }
+    @discardableResult
+    func cutHere() -> Bool {
+        guard !world.isTearing, let target = world.defaultCutTarget() else { return false }
         highlightS = target
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(260))
             self.world.cut(atS: target, fromLeft: true)
             self.highlightS = nil
+        }
+        return true
+    }
+
+    /// 作品を最初から読み直す(紙・染み・視点を初期状態へ)。
+    func resetReading() {
+        world = PaperWorld(segmentCount: segments.count)
+        world.onTear = { [weak self] in self?.impact.impactOccurred() }
+        wetSpots = []
+        highlightS = nil
+        yaw = 0; pitch = 0; isResettingView = false
+        updateCamera()
+        guard let atlas = atlasImage, let tex = paperTexture else { return }
+        wetLayer = WetPaintLayer(base: atlas)
+        textureDirty = false
+        Task { @MainActor in
+            try? await tex.replace(withImage: atlas, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
         }
     }
 }

@@ -55,10 +55,13 @@ final class PaperWorld {
 
     var onTear: (() -> Void)?
 
+    /// 紙を最後まで引き出した(読了)
+    var isExhausted: Bool { sExit >= totalLength - 0.001 }
+
     var strips: [PaperStrip] { [main] + pieces }
     var isTearing: Bool { pieces.contains { $0.weld != nil } }
 
-    init(segmentCount: Int, initialHang: Float = 0.46) {
+    init(segmentCount: Int, initialHang: Float = 0.62) {
         self.segmentCount = segmentCount
         totalLength = Float(segmentCount) * G.segmentHeight
         sExit = initialHang
@@ -113,13 +116,6 @@ final class PaperWorld {
             m.s.insert(m.s[1] + G.rowSpacing, at: 1)
             m.pos.insert(contentsOf: np, at: cols)
             m.prev.insert(contentsOf: nq, at: cols)
-        }
-        if !isTearing {
-            while m.rowCount > G.maxRows {
-                m.s.removeLast()
-                m.pos.removeLast(cols)
-                m.prev.removeLast(cols)
-            }
         }
     }
 
@@ -201,26 +197,34 @@ final class PaperWorld {
 
     // MARK: - 物理
 
+    private var accumulator: Float = 0
+    private static let fixedStep: Float = 1.0 / 120.0
+
+    /// フレームレートに依存しないよう、物理は固定時間刻みで進める。
     func step(_ frameDt: Float) {
-        let dt = min(frameDt, 1.0 / 30.0)
+        let dt = min(frameDt, 0.1)
         if abs(feedVelocity) > 0.003 {
             feed(feedVelocity * dt)
             feedVelocity *= exp(-dt * 4)
         } else {
             feedVelocity = 0
         }
-        let substeps = 2
-        let h = dt / Float(substeps)
-        for _ in 0..<substeps {
-            time += h
-            for st in strips { integrate(st, h: h) }
-            for it in 0..<14 {
-                for st in strips { solve(st, reverse: it % 2 == 1) }
-                solveWelds()
-                for st in strips { collide(st) }
-            }
+        accumulator += dt
+        while accumulator >= Self.fixedStep {
+            accumulator -= Self.fixedStep
+            substep(Self.fixedStep)
         }
-        updateWelds(dt)
+    }
+
+    private func substep(_ h: Float) {
+        time += h
+        for st in strips { integrate(st, h: h) }
+        for it in 0..<14 {
+            for st in strips { solve(st, reverse: it % 2 == 1) }
+            solveWelds()
+            for st in strips { collide(st) }
+        }
+        updateWelds(h)
         pieces.removeAll { piece in
             piece.weld == nil && (piece.pos.map(\.y).max() ?? 0) < -0.7
         }

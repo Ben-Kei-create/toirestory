@@ -4,6 +4,9 @@ import RealityKit
 struct ContentView: View {
     @State private var controller = PaperSceneController()
     @State private var hasInteracted = false
+    @State private var notice: String?
+    @State private var finished = false
+    @State private var confirmRestart = false
     @State private var dragMode: DragMode = .idle
     @State private var lastTranslation: CGSize = .zero
 
@@ -41,11 +44,64 @@ struct ContentView: View {
                     .padding(.bottom, 14)
                 }
                 .padding(.horizontal, 20)
+
+                if let notice {
+                    Text(notice)
+                        .font(.system(size: 13))
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .position(x: geo.size.width / 2, y: geo.size.height - 130)
+                        .transition(.opacity)
+                }
+                if finished { finishedOverlay }
+            }
+            .animation(.easeInOut(duration: 0.25), value: notice)
+            .animation(.easeInOut(duration: 0.4), value: finished)
+            .confirmationDialog("最初から読み直しますか?", isPresented: $confirmRestart, titleVisibility: .visible) {
+                Button("最初から読む", role: .destructive) {
+                    controller.resetReading()
+                    finished = false
+                }
+                Button("キャンセル", role: .cancel) {}
+            }
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(300))
+                    let done = controller.world.isExhausted && controller.world.feedVelocity == 0
+                    if done != finished { finished = done }
+                }
             }
             .background(Color(red: 0.95, green: 0.92, blue: 0.86))
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
+    }
+
+    private func showNotice(_ text: String) {
+        notice = text
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if notice == text { notice = nil }
+        }
+    }
+
+    private var finishedOverlay: some View {
+        VStack(spacing: 14) {
+            Text("読了")
+                .font(.custom("HiraMinProN-W6", size: 26))
+            Text("紙を最後まで引き出しました")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+            Button("最初から読む") {
+                controller.resetReading()
+                finished = false
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color(white: 0.3))
+        }
+        .padding(28)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .transition(.opacity)
     }
 
     private var header: some View {
@@ -60,16 +116,22 @@ struct ContentView: View {
                     .foregroundStyle(Color(white: 0.2))
             }
             Spacer()
-            Image(systemName: "gearshape")
-                .foregroundStyle(.secondary)
+            Button { confirmRestart = true } label: {
+                Image(systemName: "arrow.counterclockwise")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 36)
+            }
         }
         .padding(.top, 64)
     }
 
     private var cutButton: some View {
         Button {
-            hasInteracted = true
-            controller.cutHere()
+            if controller.cutHere() {
+                hasInteracted = true
+            } else if !controller.world.isTearing {
+                showNotice("切れるミシン目まで、もう少し引いてください")
+            }
         } label: {
             Label("ここで切る", systemImage: "scissors")
                 .font(.system(size: 14, weight: .medium))
@@ -155,7 +217,7 @@ struct ContentView: View {
                 }
             }
             .onEnded { v in
-                if dragMode == .undecided {
+                if dragMode == .undecided, hypot(v.translation.width, v.translation.height) < 12 {
                     hasInteracted = true
                     controller.touchPaper(at: v.startLocation, in: size)
                 }
