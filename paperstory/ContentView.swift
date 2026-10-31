@@ -2,6 +2,7 @@ import SwiftUI
 import RealityKit
 
 struct ContentView: View {
+    var onClose: (() -> Void)? = nil
     @State private var controller = PaperSceneController()
     @State private var hasInteracted = false
     @State private var notice: String?
@@ -116,6 +117,14 @@ struct ContentView: View {
                     .foregroundStyle(Color(white: 0.2))
             }
             Spacer()
+            if let onClose {
+                Button(action: onClose) {
+                    Image(systemName: "books.vertical")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("作品選択に戻る")
+            }
             Button { confirmRestart = true } label: {
                 Image(systemName: "arrow.counterclockwise")
                     .foregroundStyle(.secondary)
