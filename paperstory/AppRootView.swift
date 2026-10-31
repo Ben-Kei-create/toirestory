@@ -117,19 +117,20 @@ struct AppRootView: View {
 
 private struct RollIntroView: View {
     let reduceMotion: Bool
+    private static let frameCount = 10
+    private static let frameDuration = 0.28
     @State private var startedAt = Date()
 
     var body: some View {
         VStack(spacing: 24) {
-            TimelineView(.animation(paused: reduceMotion)) { timeline in
+            TimelineView(.periodic(from: startedAt, by: Self.frameDuration)) { timeline in
                 let elapsed = max(0, timeline.date.timeIntervalSince(startedAt))
-                let progress = reduceMotion ? 0 : min(elapsed / 2.8, 1)
-                Canvas { context, size in
-                    drawRoll(context: &context, size: size, progress: progress)
-                }
+                let index = reduceMotion ? 6 : min(Int(elapsed / Self.frameDuration), Self.frameCount - 1)
+                Image("roll-\(String(format: "%02d", index + 1))")
+                    .resizable()
+                    .scaledToFit()
             }
             .frame(width: 280, height: 300)
-            .clipped()
             .accessibilityHidden(true)
 
             Text("paperstory")
@@ -142,52 +143,6 @@ private struct RollIntroView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppPalette.background.ignoresSafeArea())
         .accessibilityElement(children: .combine)
-    }
-
-    private func drawRoll(context: inout GraphicsContext, size: CGSize, progress: Double) {
-        let unwinding = min(progress / 0.84, 1)
-        let disappearance = max(0, (progress - 0.84) / 0.16)
-        let radius = CGFloat(54 - 40 * unwinding)
-        let center = CGPoint(x: size.width / 2, y: 88)
-        let left = center.x - 72
-        let right = center.x + 72
-        let outline = AppPalette.ink.opacity(0.65)
-        context.opacity = 1 - disappearance
-
-        // The moving sheet extends out of view as the remaining roll shrinks.
-        let sheetTop = center.y + radius * 0.25
-        let sheetBottom = sheetTop + 100 + CGFloat(unwinding) * size.height
-        let sheetRect = CGRect(x: left + 22, y: sheetTop, width: 122, height: sheetBottom - sheetTop)
-        context.fill(Path(sheetRect), with: .color(.white))
-        var edges = Path()
-        edges.move(to: CGPoint(x: sheetRect.minX, y: sheetTop))
-        edges.addLine(to: CGPoint(x: sheetRect.minX, y: sheetBottom))
-        edges.move(to: CGPoint(x: sheetRect.maxX, y: sheetTop))
-        edges.addLine(to: CGPoint(x: sheetRect.maxX, y: sheetBottom))
-        context.stroke(edges, with: .color(outline), lineWidth: 1.5)
-        let movement = CGFloat(unwinding * 650)
-        for row in -8..<8 {
-            let y = sheetTop + CGFloat(row) * 68 + movement
-            guard y > sheetTop + 12, y < sheetBottom - 8 else { continue }
-            var perforation = Path()
-            perforation.move(to: CGPoint(x: sheetRect.minX + 6, y: y))
-            perforation.addLine(to: CGPoint(x: sheetRect.maxX - 6, y: y))
-            context.stroke(perforation, with: .color(outline.opacity(0.45)),
-                           style: StrokeStyle(lineWidth: 1, dash: [4, 5]))
-        }
-
-        // End caps and a narrowing body make the paper visibly run out.
-        let body = CGRect(x: left, y: center.y - radius, width: 144, height: radius * 2)
-        context.fill(Path(roundedRect: body, cornerRadius: radius * 0.35), with: .color(.white))
-        context.stroke(Path(roundedRect: body, cornerRadius: radius * 0.35), with: .color(outline), lineWidth: 1.5)
-        let end = CGRect(x: right - radius * 0.38, y: center.y - radius,
-                         width: radius * 0.76, height: radius * 2)
-        context.fill(Path(ellipseIn: end), with: .color(Color(red: 0.89, green: 0.86, blue: 0.79)))
-        context.stroke(Path(ellipseIn: end), with: .color(outline), lineWidth: 1.5)
-        let coreRadius = CGFloat(10) * (1 - disappearance)
-        let core = CGRect(x: right - coreRadius * 0.38, y: center.y - coreRadius,
-                          width: coreRadius * 0.76, height: coreRadius * 2)
-        context.fill(Path(ellipseIn: core), with: .color(AppPalette.ink))
     }
 }
 
