@@ -27,6 +27,13 @@ struct ContentView: View {
                     .gesture(dragGesture(size: geo.size))
                     perforationOverlay
                         .allowsHitTesting(false)
+                    VStack {
+                        Spacer(minLength: 0)
+                        LinearGradient(colors: [background.opacity(0), background],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: 14)
+                    }
+                    .allowsHitTesting(false)
                     if finished { finishedOverlay }
                 }
                 .clipped()
@@ -115,7 +122,7 @@ struct ContentView: View {
                 .accessibilityLabel("作品選択に戻る")
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text("ToireStory")
+                Text("paperstory")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(ink.opacity(0.7))
                 Text(Story.title)
@@ -148,8 +155,8 @@ struct ContentView: View {
                 .font(.body.weight(.medium))
                 .padding(.horizontal, 18)
                 .frame(minHeight: 44)
-                .background(controller.canCut ? AppPalette.accent : Color.clear, in: Capsule())
-                .foregroundStyle(controller.canCut ? Color.white : Color(white: 0.60))
+                .background(controller.canCut ? AppPalette.accent.opacity(0.18) : Color.clear, in: Capsule())
+                .foregroundStyle(controller.canCut ? ink : Color(white: 0.60))
         }
         .buttonStyle(.plain)
         .disabled(!controller.canCut)

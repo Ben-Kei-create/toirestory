@@ -31,6 +31,7 @@ final class PaperSceneController {
     private let cameraEntity = PerspectiveCamera()
     private var cameraDistance = G.cameraZ
     private var cameraFocusY = G.rollY - G.initialHang + G.segmentHeight / 2
+    private var edgeTime: Float = 0
     /// 視点(紙の中心まわりを回る)。0,0 が初期位置。
     private(set) var yaw: Float = 0
     private(set) var pitch: Float = 0
@@ -161,6 +162,7 @@ final class PaperSceneController {
     // MARK: - 毎フレーム
 
     private func tick(_ dt: Float) {
+        edgeTime += min(dt, 1.0 / 30.0)
         world.step(dt)
         refreshCutAvailability()
         if isResettingView {
@@ -204,6 +206,7 @@ final class PaperSceneController {
                     guard rows > 1, vCount + rows * cols <= verts.count,
                           iCount + (rows - 1) * (cols - 1) * 6 <= idx.count else { continue }
                     let base = vCount
+                    let hasFreeEnd = !world.pieces.contains { $0.weld?.upper === st }
                     for r in 0..<rows {
                         let v = 1 - (total - st.s[r]) / total
                         for c in 0..<cols {
@@ -215,7 +218,13 @@ final class PaperSceneController {
                             var n = simd_cross(right - left, up - down)
                             let len = simd_length(n)
                             n = len > 1e-9 ? n / len : [0, 0, 1]
-                            verts[base + i] = PaperVertex(position: st.pos[i], normal: n,
+                            var position = st.pos[i]
+                            if r == rows - 1, hasFreeEnd {
+                                // A small uneven silhouette and curl distinguish a free edge from viewport clipping.
+                                position.y += sin(Float(c) * 2.1 + st.s[r] * 9) * 0.0013
+                                position.z += sin(edgeTime * 1.4 + Float(c) * 0.9) * 0.002
+                            }
+                            verts[base + i] = PaperVertex(position: position, normal: n,
                                                           uv: [Float(c) / Float(cols - 1), v])
                         }
                     }
@@ -319,7 +328,7 @@ final class PaperSceneController {
         return cameraTarget + SIMD3(r * sin(yaw) * cos(pitch), r * sin(pitch), r * cos(yaw) * cos(pitch))
     }
 
-    // Frame the first printed segment for reading, rather than fitting the whole roll.
+    // Keep the roll in view while reserving most of the viewport for the printed paper.
     private var cameraTarget: SIMD3<Float> {
         [0, cameraFocusY, 0]
     }
@@ -328,11 +337,12 @@ final class PaperSceneController {
         guard size.width > 0, size.height > 0 else { return }
         let preferredWidth = min(size.width * 0.72, 320)
         let minimumScale = G.minimumTextPoints / (G.charPitch * G.fontSizeRatio)
-        let segmentFitScale = Float(size.height) / (G.segmentHeight + 0.08)
-        let pointsPerMeter = min(Float(preferredWidth) / G.width, max(minimumScale, segmentFitScale))
+        let rollAndPaperHeight = G.initialHang + G.rollRadius + 0.055
+        let sceneFitScale = Float(size.height) / rollAndPaperHeight
+        let pointsPerMeter = min(Float(preferredWidth) / G.width, max(minimumScale, sceneFitScale))
         let visibleHeight = Float(size.height) / pointsPerMeter
-        let firstSegmentTop = G.rollY - G.initialHang + G.segmentHeight
-        cameraFocusY = firstSegmentTop - min(G.segmentHeight / 2, max(visibleHeight / 2 - 0.04, 0))
+        // Keep the holder's upper edge inside the frame, including the space reserved for ads.
+        cameraFocusY = G.rollY + 0.065 - visibleHeight / 2
         let halfFOV = tan(G.fovDegrees * .pi / 360)
         cameraDistance = G.frontZ + Float(size.height) / (2 * halfFOV * pointsPerMeter)
         updateCamera()

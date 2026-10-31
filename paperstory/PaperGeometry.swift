@@ -19,7 +19,7 @@ enum PaperGeometry {
     static let frontZ: Float = rollRadius + 0.002
     static let wallZ: Float = -0.04
 
-    static let initialHang: Float = 0.70
+    static let initialHang: Float = 0.43
     static let cameraZ: Float = 0.70
     static let fovDegrees: Float = 45
 }

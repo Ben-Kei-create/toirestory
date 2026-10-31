@@ -10,6 +10,7 @@ struct AppRootView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingIntro = true
     @State private var reading = false
+    @State private var advertising = AdvertisingController()
 
     var body: some View {
         ZStack {
@@ -22,6 +23,11 @@ struct AppRootView: View {
             } else {
                 storySelection
                     .transition(.opacity)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !showingIntro {
+                AdMobBannerBar(controller: advertising)
             }
         }
         .animation(.easeInOut(duration: reduceMotion ? 0 : 0.3), value: showingIntro)
@@ -41,7 +47,7 @@ struct AppRootView: View {
     private var storySelection: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("ToireStory")
+                Text("paperstory")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(AppPalette.accent)
                     .padding(.bottom, 18)
@@ -126,7 +132,7 @@ private struct RollIntroView: View {
             .clipped()
             .accessibilityHidden(true)
 
-            Text("ToireStory")
+            Text("paperstory")
                 .font(.system(size: 25, weight: .medium, design: .rounded))
                 .foregroundStyle(AppPalette.ink)
             Text("ひと巻きの、物語。")
