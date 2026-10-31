@@ -61,7 +61,7 @@ final class PaperWorld {
     var strips: [PaperStrip] { [main] + pieces }
     var isTearing: Bool { pieces.contains { $0.weld != nil } }
 
-    init(segmentCount: Int, initialHang: Float = 0.62) {
+    init(segmentCount: Int, initialHang: Float = PaperGeometry.initialHang) {
         self.segmentCount = segmentCount
         totalLength = Float(segmentCount) * G.segmentHeight
         sExit = initialHang

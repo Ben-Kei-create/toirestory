@@ -4,8 +4,7 @@ import RealityKit
 struct ContentView: View {
     var onClose: (() -> Void)? = nil
     @State private var controller = PaperSceneController()
-    @State private var hasInteracted = false
-    @State private var notice: String?
+    @State private var hasPulled = false
     @State private var finished = false
     @State private var confirmRestart = false
     @State private var dragMode: DragMode = .idle
@@ -13,77 +12,78 @@ struct ContentView: View {
 
     private enum DragMode { case idle, undecided, pulling, tearing, orbiting }
 
+    private let ink = AppPalette.ink
+    private let background = AppPalette.background
+
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                RealityView { content in
-                    content.camera = .virtual
-                    await controller.setup(content)
-                }
-                .gesture(dragGesture(size: geo.size))
-
-                perforationOverlay
-                    .allowsHitTesting(false)
-
-                VStack(spacing: 0) {
-                    header
-                    Spacer()
-                    if !hasInteracted {
-                        Text("手前にまわす")
-                            .font(.custom("HiraMinProN-W3", size: 16))
-                            .foregroundStyle(.secondary)
-                            .padding(.bottom, 14)
-                            .transition(.opacity)
+        VStack(spacing: 0) {
+            header
+            GeometryReader { geo in
+                ZStack {
+                    RealityView { content in
+                        content.camera = .virtual
+                        await controller.setup(content)
                     }
-                    ZStack {
-                        cutButton
-                        HStack {
-                            Spacer()
-                            resetViewButton
-                        }
-                    }
-                    .padding(.bottom, 14)
+                    .gesture(dragGesture(size: geo.size))
+                    perforationOverlay
+                        .allowsHitTesting(false)
+                    if finished { finishedOverlay }
                 }
-                .padding(.horizontal, 20)
-
-                if let notice {
-                    Text(notice)
-                        .font(.system(size: 13))
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .position(x: geo.size.width / 2, y: geo.size.height - 130)
-                        .transition(.opacity)
-                }
-                if finished { finishedOverlay }
-            }
-            .animation(.easeInOut(duration: 0.25), value: notice)
-            .animation(.easeInOut(duration: 0.4), value: finished)
-            .confirmationDialog("最初から読み直しますか?", isPresented: $confirmRestart, titleVisibility: .visible) {
-                Button("最初から読む", role: .destructive) {
-                    controller.resetReading()
-                    finished = false
-                }
-                Button("キャンセル", role: .cancel) {}
-            }
-            .task {
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .milliseconds(300))
-                    let done = controller.world.isExhausted && controller.world.feedVelocity == 0
-                    if done != finished { finished = done }
+                .clipped()
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                    controller.updateViewport(size)
                 }
             }
-            .background(Color(red: 0.95, green: 0.92, blue: 0.86))
+            readingControls
         }
-        .ignoresSafeArea()
+        .background(background.ignoresSafeArea())
+        .tint(ink)
         .preferredColorScheme(.light)
+        .animation(.easeInOut(duration: 0.25), value: hasPulled)
+        .animation(.easeInOut(duration: 0.4), value: finished)
+        .confirmationDialog("最初から読み直しますか?", isPresented: $confirmRestart, titleVisibility: .visible) {
+            Button("最初から読む", role: .destructive) { restartReading() }
+            Button("キャンセル", role: .cancel) {}
+        }
+        .task {
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(300)) }
+                catch { return }
+                let done = controller.world.isExhausted && controller.world.feedVelocity == 0
+                if done != finished { finished = done }
+            }
+        }
     }
 
-    private func showNotice(_ text: String) {
-        notice = text
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            if notice == text { notice = nil }
+    private func restartReading() {
+        controller.resetReading()
+        finished = false
+        hasPulled = false
+    }
+
+    private var readingControls: some View {
+        VStack(spacing: 12) {
+            Text("下へ引いて読む")
+                .font(.subheadline)
+                .foregroundStyle(ink.opacity(0.75))
+                .opacity(hasPulled ? 0 : 1)
+                .accessibilityHidden(hasPulled)
+                .accessibilityIdentifier("reading.hint")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 16) {
+                    cutButton
+                    resetViewButton
+                }
+                VStack(spacing: 12) {
+                    cutButton
+                    resetViewButton
+                }
+            }
         }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(background)
     }
 
     private var finishedOverlay: some View {
@@ -94,8 +94,7 @@ struct ContentView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
             Button("最初から読む") {
-                controller.resetReading()
-                finished = false
+                restartReading()
             }
             .buttonStyle(.borderedProminent)
             .tint(Color(white: 0.3))
@@ -106,63 +105,70 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("ToireStory")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .tracking(1.2)
-                    .foregroundStyle(.secondary)
-                Text(Story.title)
-                    .font(.custom("HiraMinProN-W6", size: 17))
-                    .foregroundStyle(Color(white: 0.2))
-            }
-            Spacer()
+        HStack(spacing: 12) {
             if let onClose {
                 Button(action: onClose) {
-                    Image(systemName: "books.vertical")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 44)
+                    Image(systemName: "chevron.left")
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel("作品選択に戻る")
             }
-            Button { confirmRestart = true } label: {
-                Image(systemName: "arrow.counterclockwise")
-                    .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("ToireStory")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(ink.opacity(0.7))
+                Text(Story.title)
+                    .font(.headline)
             }
+            Spacer(minLength: 8)
+            Menu {
+                Button("最初から読み直す", systemImage: "arrow.counterclockwise", role: .destructive) {
+                    confirmRestart = true
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("読書メニュー")
         }
-        .padding(.top, 64)
+        .foregroundStyle(ink)
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(background)
     }
 
     private var cutButton: some View {
         Button {
-            if controller.cutHere() {
-                hasInteracted = true
-            } else if !controller.world.isTearing {
-                showNotice("切れるミシン目まで、もう少し引いてください")
-            }
+            controller.cutHere()
         } label: {
             Label("ここで切る", systemImage: "scissors")
-                .font(.system(size: 14, weight: .medium))
+                .font(.body.weight(.medium))
                 .padding(.horizontal, 18)
-                .padding(.vertical, 10)
-                .background(.ultraThinMaterial, in: Capsule())
-                .foregroundStyle(Color(white: 0.25))
+                .frame(minHeight: 44)
+                .background(controller.canCut ? AppPalette.accent : Color.clear, in: Capsule())
+                .foregroundStyle(controller.canCut ? Color.white : Color(white: 0.60))
         }
-        .padding(.bottom, 20)
+        .buttonStyle(.plain)
+        .disabled(!controller.canCut)
+        .accessibilityIdentifier("reading.cut")
+        .accessibilityValue(controller.canCut ? "切断できます" : "切断できません")
+        .accessibilityHint(controller.canCut ? "ミシン目で紙を切ります" : "切れるミシン目まで下へ引いてください")
     }
 
     private var resetViewButton: some View {
         Button {
             controller.resetView()
         } label: {
-            Image(systemName: "circle")
-                .font(.system(size: 22, weight: .light))
-                .frame(width: 44, height: 44)
-                .overlay(Circle().fill(Color(white: 0.3).opacity(0.5)).frame(width: 8, height: 8))
-                .foregroundStyle(Color(white: 0.3))
+            Label("視点を戻す", systemImage: "viewfinder")
+                .font(.subheadline)
+                .frame(minHeight: 44)
+                .padding(.horizontal, 12)
         }
-        .padding(.bottom, 20)
+        .buttonStyle(.plain)
+        .foregroundStyle(ink)
     }
 
     private var perforationOverlay: some View {
@@ -203,23 +209,16 @@ struct ContentView: View {
                     if abs(t.width) > abs(t.height) * 1.4 {
                         if let s = controller.highlightS, abs(t.width) > 20 {
                             dragMode = .tearing
-                            hasInteracted = true
                             controller.world.cut(atS: s, fromLeft: t.width > 0)
                         }
                     } else {
                         dragMode = .pulling
-                        hasInteracted = true
                         controller.highlightS = nil
-                        lastTranslation = .zero
+                        pullPaper(by: v.translation, in: size)
+                        lastTranslation = v.translation
                     }
                 case .pulling:
-                    let axis = controller.pullAxis(in: size)
-                    let along = (delta.width * axis.dir.dx + delta.height * axis.dir.dy) / axis.pointsPerMeter
-                    if along > 0 {
-                        controller.world.feed(Float(along))
-                    } else if along < 0 {
-                        controller.world.nudgeBack(Float(-along))
-                    }
+                    pullPaper(by: delta, in: size)
                     lastTranslation = v.translation
                 default:
                     break
@@ -227,7 +226,6 @@ struct ContentView: View {
             }
             .onEnded { v in
                 if dragMode == .undecided, hypot(v.translation.width, v.translation.height) < 12 {
-                    hasInteracted = true
                     controller.touchPaper(at: v.startLocation, in: size)
                 }
                 if dragMode == .pulling {
@@ -238,6 +236,18 @@ struct ContentView: View {
                 controller.highlightS = nil
                 dragMode = .idle
             }
+    }
+
+    private func pullPaper(by delta: CGSize, in size: CGSize) {
+        let axis = controller.pullAxis(in: size)
+        let along = (delta.width * axis.dir.dx + delta.height * axis.dir.dy) / axis.pointsPerMeter
+        if along > 0 {
+            let previousExit = controller.world.sExit
+            controller.world.feed(Float(along))
+            if controller.world.sExit > previousExit { hasPulled = true }
+        } else if along < 0 {
+            controller.world.nudgeBack(Float(-along))
+        }
     }
 }
 

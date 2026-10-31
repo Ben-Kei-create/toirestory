@@ -10,6 +10,8 @@ enum PaperGeometry {
     static let maxRows = 200
     static let segmentHeight: Float = 0.42
     static let charPitch: Float = 0.0175
+    static let fontSizeRatio: Float = 0.92
+    static let minimumTextPoints: Float = 18
     static let pixelsPerMeter: Float = 3200
 
     static let rollY: Float = 0.20
@@ -17,6 +19,7 @@ enum PaperGeometry {
     static let frontZ: Float = rollRadius + 0.002
     static let wallZ: Float = -0.04
 
-    static let cameraZ: Float = 0.9
+    static let initialHang: Float = 0.70
+    static let cameraZ: Float = 0.70
     static let fovDegrees: Float = 45
 }

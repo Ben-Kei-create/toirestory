@@ -1,9 +1,9 @@
 import SwiftUI
 
-private enum AppPalette {
-    static let background = Color(red: 0.97, green: 0.96, blue: 0.93)
-    static let ink = Color(red: 0.13, green: 0.20, blue: 0.27)
-    static let blue = Color(red: 0.16, green: 0.40, blue: 0.83)
+enum AppPalette {
+    static let background = Color(red: 0.95, green: 0.92, blue: 0.86)
+    static let ink = Color(red: 0.25, green: 0.23, blue: 0.20)
+    static let accent = Color(red: 0.36, green: 0.29, blue: 0.20)
 }
 
 struct AppRootView: View {
@@ -43,7 +43,7 @@ struct AppRootView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("ToireStory")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppPalette.blue)
+                    .foregroundStyle(AppPalette.accent)
                     .padding(.bottom, 18)
                 Text("ひと巻きの、物語。")
                     .font(.system(size: 30, weight: .medium, design: .serif))
@@ -58,7 +58,6 @@ struct AppRootView: View {
                     storyButton(title: "走れメロス", subtitle: "太宰 治", available: true) {
                         reading = true
                     }
-                    storyButton(title: "おすすめの名作", subtitle: "準備中", available: false) {}
                     storyButton(title: "おすすめの名作", subtitle: "準備中", available: false) {}
                 }
             }
@@ -77,7 +76,7 @@ struct AppRootView: View {
             HStack(spacing: 16) {
                 Image(systemName: "book.closed")
                     .font(.system(size: 23, weight: .regular))
-                    .foregroundStyle(available ? AppPalette.blue : Color(white: 0.59))
+                    .foregroundStyle(available ? AppPalette.accent : Color(white: 0.59))
                     .frame(width: 44, height: 48)
                 VStack(alignment: .leading, spacing: 7) {
                     Text(title)
@@ -90,7 +89,7 @@ struct AppRootView: View {
                 if available {
                     Image(systemName: "arrow.right")
                         .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(AppPalette.blue)
+                        .foregroundStyle(AppPalette.accent)
                 }
             }
             .foregroundStyle(available ? AppPalette.ink : Color(white: 0.55))
@@ -100,7 +99,7 @@ struct AppRootView: View {
                         in: RoundedRectangle(cornerRadius: 18))
             .overlay {
                 RoundedRectangle(cornerRadius: 18)
-                    .strokeBorder(available ? AppPalette.blue.opacity(0.22) : Color(white: 0.85), lineWidth: 1)
+                    .strokeBorder(available ? AppPalette.accent.opacity(0.22) : Color(white: 0.85), lineWidth: 1)
             }
             .contentShape(RoundedRectangle(cornerRadius: 18))
         }

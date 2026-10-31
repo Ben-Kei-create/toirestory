@@ -1,6 +1,7 @@
 import SwiftUI
 import RealityKit
 import UIKit
+import Observation
 
 struct PaperVertex {
     var position: SIMD3<Float>
@@ -10,6 +11,7 @@ struct PaperVertex {
 
 /// RealityKit のシーン(ロール・壁・照明・紙メッシュ)と PaperWorld をつなぐ。
 @MainActor
+@Observable
 final class PaperSceneController {
     private typealias G = PaperGeometry
 
@@ -27,6 +29,8 @@ final class PaperSceneController {
     private var wetSpots: [(s: Float, u: Float, count: Int)] = []
     static let maxWetLevel = 6
     private let cameraEntity = PerspectiveCamera()
+    private var cameraDistance = G.cameraZ
+    private var cameraFocusY = G.rollY - G.initialHang + G.segmentHeight / 2
     /// 視点(紙の中心まわりを回る)。0,0 が初期位置。
     private(set) var yaw: Float = 0
     private(set) var pitch: Float = 0
@@ -36,6 +40,8 @@ final class PaperSceneController {
     /// ミシン目の強調表示(SwiftUI 側のオーバーレイが読む)
     var highlightS: Float?
     var isReady = false
+    private(set) var canCut = false
+    private var cutTask: Task<Void, Never>?
 
     private static let maxStrips = 4
     private static let vertexCapacity = maxStrips * (G.maxRows + 2) * G.cols
@@ -97,6 +103,7 @@ final class PaperSceneController {
             content.add(entity)
             updateMesh()
             isReady = true
+            refreshCutAvailability()
         } catch {
             print("paper setup failed:", error)
         }
@@ -155,6 +162,7 @@ final class PaperSceneController {
 
     private func tick(_ dt: Float) {
         world.step(dt)
+        refreshCutAvailability()
         if isResettingView {
             let k = 1 - exp(-dt * 4)
             yaw -= yaw * k
@@ -307,12 +315,31 @@ final class PaperSceneController {
     // MARK: - 視点
 
     private var cameraPosition: SIMD3<Float> {
-        let r = G.cameraZ
-        return [r * sin(yaw) * cos(pitch), r * sin(pitch), r * cos(yaw) * cos(pitch)]
+        let r = cameraDistance
+        return cameraTarget + SIMD3(r * sin(yaw) * cos(pitch), r * sin(pitch), r * cos(yaw) * cos(pitch))
+    }
+
+    // Frame the first printed segment for reading, rather than fitting the whole roll.
+    private var cameraTarget: SIMD3<Float> {
+        [0, cameraFocusY, 0]
+    }
+
+    func updateViewport(_ size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        let preferredWidth = min(size.width * 0.72, 320)
+        let minimumScale = G.minimumTextPoints / (G.charPitch * G.fontSizeRatio)
+        let segmentFitScale = Float(size.height) / (G.segmentHeight + 0.08)
+        let pointsPerMeter = min(Float(preferredWidth) / G.width, max(minimumScale, segmentFitScale))
+        let visibleHeight = Float(size.height) / pointsPerMeter
+        let firstSegmentTop = G.rollY - G.initialHang + G.segmentHeight
+        cameraFocusY = firstSegmentTop - min(G.segmentHeight / 2, max(visibleHeight / 2 - 0.04, 0))
+        let halfFOV = tan(G.fovDegrees * .pi / 360)
+        cameraDistance = G.frontZ + Float(size.height) / (2 * halfFOV * pointsPerMeter)
+        updateCamera()
     }
 
     private func updateCamera() {
-        cameraEntity.look(at: .zero, from: cameraPosition, relativeTo: nil)
+        cameraEntity.look(at: cameraTarget, from: cameraPosition, relativeTo: nil)
     }
 
     /// 紙以外を触れたまま動かして視点を回す。
@@ -329,7 +356,7 @@ final class PaperSceneController {
 
     func project(_ p: SIMD3<Float>, in size: CGSize) -> CGPoint {
         let pos = cameraPosition
-        let fwd = simd_normalize(-pos)
+        let fwd = simd_normalize(cameraTarget - pos)
         let right = simd_normalize(simd_cross(fwd, [0, 1, 0]))
         let up = simd_cross(right, fwd)
         let rel = p - pos
@@ -407,24 +434,36 @@ final class PaperSceneController {
     /// 「ここで切る」: 対象のミシン目を示してから切る。
     @discardableResult
     func cutHere() -> Bool {
-        guard !world.isTearing, let target = world.defaultCutTarget() else { return false }
+        guard isReady, cutTask == nil, !world.isTearing, let target = world.defaultCutTarget() else { return false }
+        canCut = false
         highlightS = target
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(260))
+        cutTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(260)) }
+            catch { return }
+            guard let self else { return }
             self.world.cut(atS: target, fromLeft: true)
             self.highlightS = nil
+            self.cutTask = nil
+            self.refreshCutAvailability()
         }
         return true
     }
 
+    private func refreshCutAvailability() {
+        canCut = isReady && cutTask == nil && !world.isTearing && world.defaultCutTarget() != nil
+    }
+
     /// 作品を最初から読み直す(紙・染み・視点を初期状態へ)。
     func resetReading() {
+        cutTask?.cancel()
+        cutTask = nil
         world = PaperWorld(segmentCount: segments.count)
         world.onTear = { [weak self] in self?.impact.impactOccurred() }
         wetSpots = []
         highlightS = nil
         yaw = 0; pitch = 0; isResettingView = false
         updateCamera()
+        refreshCutAvailability()
         guard let atlas = atlasImage, let tex = paperTexture else { return }
         wetLayer = WetPaintLayer(base: atlas)
         textureDirty = false

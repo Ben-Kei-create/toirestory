@@ -86,8 +86,8 @@ enum PaperPrintRenderer {
 
             // 縦書き本文: 区間kは下から数えてk番目。区間内は上から下へ。
             let pitch = CGFloat(PaperGeometry.charPitch) * ppm
-            let fontSize = pitch * 0.86
-            let font = UIFont(name: "HiraMinProN-W3", size: fontSize) ?? UIFont.systemFont(ofSize: fontSize)
+            let fontSize = pitch * CGFloat(PaperGeometry.fontSizeRatio)
+            let font = UIFont(name: "HiraMinProN-W6", size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .medium)
             let ink = UIColor(red: 0.17, green: 0.16, blue: 0.19, alpha: 0.9)
             let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
             let margin = (segH - pitch * CGFloat(TextLayout.maxSegmentChars)) / 2
