@@ -6,8 +6,10 @@ enum PaperGeometry {
     static let width: Float = 0.20
     static let pitch: Float = width / Float(cols - 1)
     static let rowSpacing: Float = 0.0125
-    /// メッシュ容量の見積り用(1枚の紙片が取りうる行数の上限)。行は削除しない。
+    /// メッシュ容量の見積り用(1枚の紙片が取りうる行数の上限)。
     static let maxRows = 200
+    /// ロールから垂れ下がる紙のうち、保持する長さ。これより下(画面外)の行は捨てる。
+    static let keepLength: Float = 1.0
     static let segmentHeight: Float = 0.42
     static let charPitch: Float = 0.0175
     static let fontSizeRatio: Float = 0.92

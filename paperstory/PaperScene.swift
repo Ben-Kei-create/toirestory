@@ -23,6 +23,16 @@ final class PaperSceneController {
     let segments: [[Character]]
     private(set) var world: PaperWorld
     private var atlasImage: CGImage?
+    /// 全文は長いので、紙の画像は「本文の一部(窓)」だけを印刷して、読み進めるたびに差し替える。
+    private static let windowSegments = 6
+    private var windowStart = 0
+    private var windowShifting = false
+    private var layoutGeneration = 0
+    private var saveClock: Float = 0
+    private var lastSavedS: Float = -1
+    private var windowSize: Int { min(Self.windowSegments, segments.count) }
+    private var windowHeight: Float { Float(windowSize) * G.segmentHeight }
+    private var windowTopS: Float { Float(windowStart + windowSize) * G.segmentHeight }
     private var mesh: LowLevelMesh?
     private let rollPivot = Entity()
     private let holderRoot = Entity()
@@ -57,9 +67,18 @@ final class PaperSceneController {
     private static let indexCapacity = maxStrips * (G.maxRows + 1) * (G.cols - 1) * 6
 
     init() {
-        segments = Array(TextLayout.segments(from: Story.opening).prefix(5))
-        world = PaperWorld(segmentCount: segments.count)
+        let all = TextLayout.segments(from: Story.body)
+        segments = all
+        let saved = ReadingProgress.load()
+        world = PaperWorld(segmentCount: all.count, resumeAt: saved)
+        windowStart = Self.windowStart(for: world.sExit, count: all.count)
         world.onTear = { [weak self] in self?.impact.impactOccurred() }
+    }
+
+    private static func windowStart(for sExit: Float, count: Int) -> Int {
+        let size = min(windowSegments, count)
+        let raw = Int(((sExit - G.keepLength - 0.1) / G.segmentHeight).rounded(.down))
+        return max(0, min(raw, count - size))
     }
 
     func setup(_ content: RealityViewCameraContent) async {
@@ -88,8 +107,9 @@ final class PaperSceneController {
         buildRollAndHolder(content)
 
         // 紙: 質感と本文を印刷した画像を用意し、変形メッシュに貼る
+        let slice = Array(segments[windowStart..<(windowStart + windowSize)])
         let atlas = await Task.detached(priority: .userInitiated) {
-            PaperPrintRenderer.renderAtlas(segments: self.segments)
+            PaperPrintRenderer.renderAtlas(segments: slice)
         }.value
         guard let atlas else { return }
         atlasImage = atlas
@@ -174,6 +194,12 @@ final class PaperSceneController {
         edgeTime += min(dt, 1.0 / 30.0)
         world.step(dt)
         refreshCutAvailability()
+        advanceWindowIfNeeded()
+        saveClock += dt
+        if saveClock >= 1 {
+            saveClock = 0
+            if world.sExit != lastSavedS { lastSavedS = world.sExit; ReadingProgress.save(world.sExit) }
+        }
         if isResettingView {
             let k = 1 - exp(-dt * 4)
             yaw -= yaw * k
@@ -183,6 +209,47 @@ final class PaperSceneController {
         }
         rollPivot.orientation = simd_quatf(angle: world.rollAngle, axis: [1, 0, 0])
         updateMesh()
+    }
+
+    /// 読み進めて窓の上端に近づいたら、次の区間を印刷した画像に差し替える。
+    private func advanceWindowIfNeeded() {
+        guard !windowShifting, isReady, windowStart + windowSize < segments.count,
+              world.sExit > windowTopS - 0.8 else { return }
+        let newStart = Self.windowStart(for: world.sExit, count: segments.count)
+        guard newStart > windowStart else { return }
+        windowShifting = true
+        let generation = layoutGeneration
+        let slice = Array(segments[newStart..<(newStart + windowSize)])
+        Task { @MainActor in
+            let atlas = await Task.detached(priority: .utility) {
+                PaperPrintRenderer.renderAtlas(segments: slice)
+            }.value
+            guard generation == self.layoutGeneration, let atlas, let tex = self.paperTexture else {
+                if generation == self.layoutGeneration { self.windowShifting = false }
+                return
+            }
+            let layer = WetPaintLayer(base: atlas)
+            let top = Float(newStart + self.windowSize) * G.segmentHeight
+            let bottom = top - self.windowHeight
+            self.wetSpots.removeAll { $0.s < bottom }
+            let ppm = CGFloat(G.pixelsPerMeter)
+            if let layer {
+                for spot in self.wetSpots where spot.s < top {
+                    for _ in 0..<spot.count {
+                        layer.addBlob(px: CGFloat(spot.u) * CGFloat(G.width) * ppm,
+                                      py: CGFloat(top - spot.s) * ppm,
+                                      radius: CGFloat.random(in: 0.011...0.016) * ppm)
+                    }
+                }
+            }
+            let image = layer?.snapshot() ?? atlas
+            try? await tex.replace(withImage: image, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
+            guard generation == self.layoutGeneration else { return }
+            self.windowStart = newStart
+            self.atlasImage = atlas
+            self.wetLayer = layer
+            self.windowShifting = false
+        }
     }
 
     private static func makeMesh() throws -> LowLevelMesh {
@@ -201,7 +268,8 @@ final class PaperSceneController {
     private func updateMesh() {
         guard let mesh else { return }
         let cols = G.cols
-        let total = world.totalLength
+        let windowTop = windowTopS
+        let windowH = windowHeight
         var vCount = 0
         var iCount = 0
         let strips = Array(world.strips.prefix(Self.maxStrips))
@@ -217,7 +285,7 @@ final class PaperSceneController {
                     let base = vCount
                     let hasFreeEnd = !world.pieces.contains { $0.weld?.upper === st }
                     for r in 0..<rows {
-                        let v = 1 - (total - st.s[r]) / total
+                        let v = max(0, min(1, 1 - (windowTop - st.s[r]) / windowH))
                         for c in 0..<cols {
                             let i = r * cols + c
                             let left = st.pos[r * cols + max(c - 1, 0)]
@@ -302,6 +370,8 @@ final class PaperSceneController {
     /// 紙をタップしたときの、濡れた指の跡。
     func touchPaper(at pt: CGPoint, in size: CGSize) {
         guard let wet = wetLayer, let hit = paperCoordinate(at: pt, in: size) else { return }
+        let windowBottom = windowTopS - windowHeight
+        guard hit.s > windowBottom + 0.02, hit.s < windowTopS - 0.02 else { return }
         // 近くに濡れた跡があれば同じ箇所として数える
         let near = wetSpots.firstIndex { abs($0.s - hit.s) < 0.03 && abs($0.u - hit.u) * G.width < 0.03 }
         let count = (near.map { wetSpots[$0].count } ?? 0) + 1
@@ -315,14 +385,14 @@ final class PaperSceneController {
         if let near { wetSpots[near].count = count } else { wetSpots.append((hit.s, hit.u, 1)) }
         let ppm = CGFloat(G.pixelsPerMeter)
         let px = CGFloat(hit.u) * CGFloat(G.width) * ppm
-        let py = CGFloat(world.totalLength - hit.s) * ppm
+        let py = CGFloat(windowTopS - hit.s) * ppm
         wet.addBlob(px: px, py: py, radius: CGFloat.random(in: 0.011...0.016) * ppm)
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         textureDirty = true
         guard !textureUpdateRunning else { return }
         textureUpdateRunning = true
         Task { @MainActor in
-            while self.textureDirty, let tex = self.paperTexture, let img = wet.snapshot() {
+            while self.textureDirty, self.wetLayer === wet, let tex = self.paperTexture, let img = wet.snapshot() {
                 self.textureDirty = false
                 try? await tex.replace(withImage: img, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
             }
@@ -492,6 +562,10 @@ final class PaperSceneController {
     func resetReading() {
         cutTask?.cancel()
         cutTask = nil
+        layoutGeneration += 1
+        windowShifting = false
+        ReadingProgress.clear()
+        lastSavedS = -1
         world = PaperWorld(segmentCount: segments.count)
         world.onTear = { [weak self] in self?.impact.impactOccurred() }
         wetSpots = []
@@ -499,11 +573,30 @@ final class PaperSceneController {
         yaw = 0; pitch = 0; isResettingView = false
         updateCamera()
         refreshCutAvailability()
-        guard let atlas = atlasImage, let tex = paperTexture else { return }
-        wetLayer = WetPaintLayer(base: atlas)
+        windowStart = 0
         textureDirty = false
+        guard let tex = paperTexture else { return }
+        let generation = layoutGeneration
+        let slice = Array(segments[0..<windowSize])
         Task { @MainActor in
+            let atlas = await Task.detached(priority: .userInitiated) {
+                PaperPrintRenderer.renderAtlas(segments: slice)
+            }.value
+            guard generation == self.layoutGeneration, let atlas else { return }
+            self.atlasImage = atlas
+            self.wetLayer = WetPaintLayer(base: atlas)
             try? await tex.replace(withImage: atlas, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
         }
     }
+}
+
+/// 読んだ位置(引き出した長さ)を端末内に保存する。外部には送らない。
+enum ReadingProgress {
+    private static let key = "readingProgress.v1"
+    static func load() -> Float? {
+        let v = UserDefaults.standard.float(forKey: key)
+        return v > 0 ? v : nil
+    }
+    static func save(_ s: Float) { UserDefaults.standard.set(s, forKey: key) }
+    static func clear() { UserDefaults.standard.removeObject(forKey: key) }
 }

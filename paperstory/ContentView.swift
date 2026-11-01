@@ -137,7 +137,7 @@ struct ContentView: View {
                 .accessibilityLabel("作品選択に戻る")
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text("paperstory")
+                Text("PaperStory")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(ink.opacity(0.7))
                 Text(Story.title)

@@ -61,11 +61,13 @@ final class PaperWorld {
     var strips: [PaperStrip] { [main] + pieces }
     var isTearing: Bool { pieces.contains { $0.weld != nil } }
 
-    init(segmentCount: Int, initialHang: Float = PaperGeometry.initialHang) {
+    /// `resumeAt` は前回までに引き出した位置(s)。指定すると、その手前から読み直せる位置に紙を吊るす。
+    init(segmentCount: Int, initialHang: Float = PaperGeometry.initialHang, resumeAt: Float? = nil) {
         self.segmentCount = segmentCount
         totalLength = Float(segmentCount) * G.segmentHeight
-        sExit = initialHang
-        main = PaperWorld.makeHangingStrip(topS: initialHang, bottomS: 0)
+        let top = min(max(resumeAt ?? 0, initialHang), totalLength)
+        sExit = top
+        main = PaperWorld.makeHangingStrip(topS: top, bottomS: max(0, top - initialHang))
     }
 
     private static func makeHangingStrip(topS: Float, bottomS: Float) -> PaperStrip {
@@ -117,6 +119,22 @@ final class PaperWorld {
             m.pos.insert(contentsOf: np, at: cols)
             m.prev.insert(contentsOf: nq, at: cols)
         }
+        trimHangingPaper()
+    }
+
+    /// 画面よりずっと下に垂れた行を捨てる(全文を読み進めても行数が増え続けないように)。
+    /// 裂け目が繋がっている間は触らない。
+    private func trimHangingPaper() {
+        guard !isTearing else { return }
+        let m = main
+        let limit = m.s[0] - G.keepLength
+        var removed = 0
+        while m.rowCount - removed > 2, m.s[m.rowCount - removed - 2] <= limit { removed += 1 }
+        guard removed > 0 else { return }
+        let n = removed * Self.cols
+        m.s.removeLast(removed)
+        m.pos.removeLast(n)
+        m.prev.removeLast(n)
     }
 
     /// 巻き戻そうとしたとき。紙は軽くたわむだけで、本文は戻らない。

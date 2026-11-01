@@ -47,7 +47,7 @@ struct AppRootView: View {
     private var storySelection: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("paperstory")
+                Text("PaperStory")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(AppPalette.accent)
                     .padding(.bottom, 18)
@@ -66,6 +66,10 @@ struct AppRootView: View {
                     }
                     storyButton(title: "おすすめの名作", subtitle: "準備中", available: false) {}
                 }
+                Text("本文は青空文庫の「走れメロス」(太宰治)を使用しています。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 20)
             }
             .frame(maxWidth: 480, alignment: .leading)
             .padding(.horizontal, 28)
@@ -133,7 +137,7 @@ private struct RollIntroView: View {
             .frame(width: 280, height: 300)
             .accessibilityHidden(true)
 
-            Text("paperstory")
+            Text("PaperStory")
                 .font(.system(size: 25, weight: .medium, design: .rounded))
                 .foregroundStyle(AppPalette.ink)
             Text("ひと巻きの、物語。")
