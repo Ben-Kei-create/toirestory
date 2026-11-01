@@ -70,7 +70,19 @@ struct AdMobBannerBar: View {
         .overlay(alignment: .top) {
             Rectangle().fill(AppPalette.ink.opacity(0.12)).frame(height: 1)
         }
-        .task { await controller.prepare() }
+        .task {
+            guard !Self.adsHiddenForScreenshots else { return }
+            await controller.prepare()
+        }
+    }
+
+    /// ストア用スクリーンショットの撮影専用。Debugビルドで起動引数 -hideAds を付けたときだけ、広告を読み込まない。
+    private static var adsHiddenForScreenshots: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-hideAds")
+        #else
+        false
+        #endif
     }
 }
 
