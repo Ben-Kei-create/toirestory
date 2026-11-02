@@ -1,4 +1,7 @@
-import UIKit
+import Foundation
+import CoreGraphics
+import CoreText
+import ImageIO
 
 private struct SplitMix: RandomNumberGenerator {
     var state: UInt64
@@ -11,115 +14,103 @@ private struct SplitMix: RandomNumberGenerator {
     }
 }
 
-/// 紙の質感・ミシン目・縦書き本文を1枚の画像に印刷する。
-/// 画像の上端が紙のロール側(s最大)、下端が紙の先端(s=0)。区間0が一番下。
+/// Paper texture and vertically arranged text, rendered without a UI framework on a background task.
 enum PaperPrintRenderer {
     nonisolated static func renderAtlas(segments: [[Character]]) -> CGImage? {
+        guard !segments.isEmpty else { return nil }
         let ppm = CGFloat(PaperGeometry.pixelsPerMeter)
         let w = Int(CGFloat(PaperGeometry.width) * ppm)
         let segH = CGFloat(PaperGeometry.segmentHeight) * ppm
-        let count = segments.count
-        let h = Int(segH * CGFloat(count))
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = true
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: w, height: h), format: format)
+        let h = Int(segH * CGFloat(segments.count))
+        guard let cg = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8,
+                                 bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        // Keep the image's upper-left coordinate system used by mesh UVs and wet marks.
+        cg.translateBy(x: 0, y: CGFloat(h))
+        cg.scaleBy(x: 1, y: -1)
+        let full = CGRect(x: 0, y: 0, width: w, height: h)
+        cg.setFillColor(CGColor(red: 0.972, green: 0.962, blue: 0.935, alpha: 1))
+        cg.fill(full)
         var rng = SplitMix(state: 0x70135702)
 
-        let image = renderer.image { ctx in
-            let cg = ctx.cgContext
-            let full = CGRect(x: 0, y: 0, width: w, height: h)
-
-            // 地色
-            UIColor(red: 0.972, green: 0.962, blue: 0.935, alpha: 1).setFill()
+        if let url = Bundle.main.url(forResource: "paper-basecolor", withExtension: "png"),
+           let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+           let tile = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            let side = CGFloat(w)
+            var y: CGFloat = 0
+            while y < CGFloat(h) {
+                cg.draw(tile, in: CGRect(x: 0, y: y, width: side, height: side))
+                y += side
+            }
+            cg.setBlendMode(.multiply)
+            cg.setFillColor(CGColor(red: 0.96, green: 0.93, blue: 0.88, alpha: 0.18))
             cg.fill(full)
-
-            // 紙の質感(素材画像をタイル状に敷く)。素材が無ければ手続き的な繊維で代用。
-            if let url = Bundle.main.url(forResource: "paper-basecolor", withExtension: "png"),
-               let tile = UIImage(contentsOfFile: url.path) {
-                let side = CGFloat(w)
-                var y: CGFloat = 0
-                var row = 0
-                while y < CGFloat(h) {
-                    tile.draw(in: CGRect(x: 0, y: y, width: side, height: side))
-                    y += side
-                    row += 1
-                }
-                // 素材はやや白いので、暖色をわずかに重ねて紙らしい色味にする
-                UIColor(red: 0.96, green: 0.93, blue: 0.88, alpha: 0.18).setFill()
-                cg.setBlendMode(.multiply)
-                cg.fill(full)
-                cg.setBlendMode(.normal)
-            } else {
-                cg.setLineCap(.round)
-                for _ in 0..<(w * h / 90) {
-                    let x = CGFloat.random(in: 0...CGFloat(w), using: &rng)
-                    let y = CGFloat.random(in: 0...CGFloat(h), using: &rng)
-                    let len = CGFloat.random(in: 6...26, using: &rng)
-                    let a = CGFloat.random(in: 0...(2 * .pi), using: &rng)
-                    cg.setStrokeColor(UIColor(white: CGFloat.random(in: 0.55...0.9, using: &rng), alpha: 0.05).cgColor)
-                    cg.setLineWidth(1)
-                    cg.move(to: CGPoint(x: x, y: y))
-                    cg.addLine(to: CGPoint(x: x + cos(a) * len, y: y + sin(a) * len))
-                    cg.strokePath()
-                }
-            }
-
-            // ミシン目(区間の境界)
-            for k in 0..<(count - 1) {
-                let y = CGFloat(k + 1) * segH
-                cg.setStrokeColor(UIColor(red: 0.5, green: 0.48, blue: 0.45, alpha: 0.6).cgColor)
-                cg.setLineWidth(3)
-                cg.setLineDash(phase: 0, lengths: [16, 9])
-                cg.setLineCap(.butt)
-                cg.move(to: CGPoint(x: 0, y: y))
-                cg.addLine(to: CGPoint(x: CGFloat(w), y: y))
+            cg.setBlendMode(.normal)
+        } else {
+            cg.setLineCap(.round)
+            for _ in 0..<(w * h / 90) {
+                let x = CGFloat.random(in: 0...CGFloat(w), using: &rng)
+                let y = CGFloat.random(in: 0...CGFloat(h), using: &rng)
+                let length = CGFloat.random(in: 6...26, using: &rng)
+                let angle = CGFloat.random(in: 0...(2 * .pi), using: &rng)
+                cg.setStrokeColor(CGColor(gray: CGFloat.random(in: 0.55...0.9, using: &rng), alpha: 0.05))
+                cg.setLineWidth(1)
+                cg.move(to: CGPoint(x: x, y: y))
+                cg.addLine(to: CGPoint(x: x + cos(angle) * length, y: y + sin(angle) * length))
                 cg.strokePath()
-                // 切れ目の影
-                cg.setStrokeColor(UIColor(white: 1, alpha: 0.5).cgColor)
-                cg.setLineWidth(1.5)
-                cg.move(to: CGPoint(x: 0, y: y + 2.5))
-                cg.addLine(to: CGPoint(x: CGFloat(w), y: y + 2.5))
-                cg.strokePath()
-            }
-            cg.setLineDash(phase: 0, lengths: [])
-
-            // 縦書き本文: 区間kは下から数えてk番目。区間内は上から下へ。
-            let pitch = CGFloat(PaperGeometry.charPitch) * ppm
-            let fontSize = pitch * CGFloat(PaperGeometry.fontSizeRatio)
-            let font = UIFont(name: "HiraMinProN-W6", size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .medium)
-            let ink = UIColor(red: 0.17, green: 0.16, blue: 0.19, alpha: 0.9)
-            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
-            let margin = (segH - pitch * CGFloat(TextLayout.maxSegmentChars)) / 2
-            let rotated: Set<Character> = ["ー", "―", "…", "「", "」", "『", "』", "（", "）", "〈", "〉", "─"]
-            let punctuation: Set<Character> = ["。", "、"]
-
-            for (k, seg) in segments.enumerated() {
-                let top = CGFloat(count - 1 - k) * segH
-                for (j, ch) in seg.enumerated() {
-                    let cx = CGFloat(w) / 2
-                    let cy = top + margin + (CGFloat(j) + 0.5) * pitch
-                    let str = String(ch) as NSString
-                    let size = str.size(withAttributes: attrs)
-                    if rotated.contains(ch) {
-                        cg.saveGState()
-                        cg.translateBy(x: cx, y: cy)
-                        cg.rotate(by: .pi / 2)
-                        str.draw(at: CGPoint(x: -size.width / 2, y: -size.height / 2), withAttributes: attrs)
-                        cg.restoreGState()
-                    } else {
-                        var ox = cx - size.width / 2
-                        var oy = cy - size.height / 2
-                        if punctuation.contains(ch) {
-                            ox += fontSize * 0.5
-                            oy -= fontSize * 0.5
-                        }
-                        str.draw(at: CGPoint(x: ox, y: oy), withAttributes: attrs)
-                    }
-                }
             }
         }
-        return image.cgImage
+
+        for k in 1..<segments.count {
+            let y = CGFloat(k) * segH
+            cg.setLineDash(phase: 0, lengths: [16, 9])
+            cg.setLineCap(.butt)
+            cg.setLineWidth(3)
+            cg.setStrokeColor(CGColor(red: 0.5, green: 0.48, blue: 0.45, alpha: 0.6))
+            cg.move(to: CGPoint(x: 0, y: y))
+            cg.addLine(to: CGPoint(x: CGFloat(w), y: y))
+            cg.strokePath()
+            cg.setLineWidth(1.5)
+            cg.setStrokeColor(CGColor(gray: 1, alpha: 0.5))
+            cg.move(to: CGPoint(x: 0, y: y + 2.5))
+            cg.addLine(to: CGPoint(x: CGFloat(w), y: y + 2.5))
+            cg.strokePath()
+        }
+        cg.setLineDash(phase: 0, lengths: [])
+
+        let pitch = CGFloat(PaperGeometry.charPitch) * ppm
+        let fontSize = pitch * CGFloat(PaperGeometry.fontSizeRatio)
+        let font = CTFontCreateWithName("HiraMinProN-W6" as CFString, fontSize, nil)
+        let attrs: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(red: 0.17, green: 0.16, blue: 0.19, alpha: 0.9)
+        ]
+        let margin = (segH - pitch * CGFloat(TextLayout.maxSegmentChars)) / 2
+        let rotated: Set<Character> = ["ー", "―", "…", "「", "」", "『", "』", "（", "）", "〈", "〉", "─"]
+        let punctuation: Set<Character> = ["。", "、"]
+        for (k, segment) in segments.enumerated() {
+            let top = CGFloat(segments.count - 1 - k) * segH
+            for (j, character) in segment.enumerated() {
+                var cx = CGFloat(w) / 2
+                var cy = top + margin + (CGFloat(j) + 0.5) * pitch
+                if punctuation.contains(character) {
+                    cx += fontSize * 0.5
+                    cy -= fontSize * 0.5
+                }
+                let line = CTLineCreateWithAttributedString(NSAttributedString(string: String(character), attributes: attrs))
+                let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+                cg.saveGState()
+                cg.translateBy(x: cx, y: cy)
+                if rotated.contains(character) { cg.rotate(by: .pi / 2) }
+                // Core Text glyphs use an upward Y axis, unlike the atlas layout above.
+                cg.scaleBy(x: 1, y: -1)
+                cg.textMatrix = .identity
+                cg.textPosition = CGPoint(x: -bounds.midX, y: -bounds.midY)
+                CTLineDraw(line, cg)
+                cg.restoreGState()
+            }
+        }
+        return cg.makeImage()
     }
 }
 

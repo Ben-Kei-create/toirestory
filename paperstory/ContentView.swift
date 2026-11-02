@@ -24,7 +24,20 @@ struct ContentView: View {
                         content.camera = .virtual
                         await controller.setup(content)
                     }
-                    .gesture(dragGesture(size: geo.size))
+                    .allowsHitTesting(false)
+                    PaperInputSurface(
+                        onChanged: { start, translation in
+                            updateDrag(start: start, translation: translation, in: geo.size)
+                        },
+                        onEnded: { start, translation, velocity in
+                            endDrag(start: start, translation: translation, velocity: velocity, in: geo.size)
+                        },
+                        onScroll: { distance in
+                            guard dragMode == .idle else { return }
+                            let axis = controller.pullAxis(in: geo.size)
+                            pullPaper(by: CGSize(width: axis.dir.dx * distance, height: axis.dir.dy * distance), in: geo.size)
+                        }
+                    )
                     perforationOverlay
                         .allowsHitTesting(false)
                     if controller.viewMode == .reading {
@@ -79,7 +92,7 @@ struct ContentView: View {
 
     private var readingControls: some View {
         VStack(spacing: 12) {
-            Text("下へ引いて読む")
+            Text("下へドラッグして読む")
                 .font(.subheadline)
                 .foregroundStyle(ink.opacity(0.75))
                 .opacity(hasPulled ? 0 : 1)
@@ -135,6 +148,7 @@ struct ContentView: View {
                         .contentShape(Rectangle())
                 }
                 .accessibilityLabel("作品選択に戻る")
+                .keyboardShortcut(.leftArrow, modifiers: .command)
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text("PaperStory")
@@ -176,6 +190,7 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .disabled(!controller.canCut)
         .accessibilityIdentifier("reading.cut")
+        .keyboardShortcut("k", modifiers: .command)
         .accessibilityValue(controller.canCut ? "切断できます" : "切断できません")
         .accessibilityHint(controller.canCut ? "ミシン目で紙を切ります" : "切れるミシン目まで下へ引いてください")
     }
@@ -196,6 +211,7 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .foregroundStyle(ink)
         .accessibilityLabel("視点を戻す")
+        .keyboardShortcut("0", modifiers: .command)
     }
 
     private var viewModeButton: some View {
@@ -217,6 +233,7 @@ struct ContentView: View {
         .accessibilityLabel(controller.viewMode == .roll ? "本文表示に切り替える" : "ロール表示に切り替える")
         .accessibilityValue(controller.viewMode == .roll ? "ロール表示" : "本文表示")
         .accessibilityIdentifier("reading.viewMode")
+        .keyboardShortcut("1", modifiers: .command)
     }
 
     private var perforationOverlay: some View {
@@ -232,58 +249,56 @@ struct ContentView: View {
         }
     }
 
-    private func dragGesture(size: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { v in
-                if dragMode == .idle {
-                    lastTranslation = .zero
-                    if controller.isOnPaper(v.startLocation, in: size) {
-                        dragMode = .undecided
-                        controller.world.feedVelocity = 0
-                        controller.highlightS = controller.perforation(near: v.startLocation, in: size)
-                    } else {
-                        dragMode = .orbiting
-                    }
-                }
-                let delta = CGSize(width: v.translation.width - lastTranslation.width,
-                                   height: v.translation.height - lastTranslation.height)
-                switch dragMode {
-                case .orbiting:
-                    controller.orbit(dx: delta.width, dy: delta.height)
-                    lastTranslation = v.translation
-                case .undecided:
-                    let t = v.translation
-                    guard hypot(t.width, t.height) > 12 else { return }
-                    if abs(t.width) > abs(t.height) * 1.4 {
-                        if let s = controller.highlightS, abs(t.width) > 20 {
-                            dragMode = .tearing
-                            controller.world.cut(atS: s, fromLeft: t.width > 0)
-                        }
-                    } else {
-                        dragMode = .pulling
-                        controller.highlightS = nil
-                        pullPaper(by: v.translation, in: size)
-                        lastTranslation = v.translation
-                    }
-                case .pulling:
-                    pullPaper(by: delta, in: size)
-                    lastTranslation = v.translation
-                default:
-                    break
-                }
+    private func updateDrag(start: CGPoint, translation: CGSize, in size: CGSize) {
+        if dragMode == .idle {
+            lastTranslation = .zero
+            if controller.isOnPaper(start, in: size) {
+                dragMode = .undecided
+                controller.world.feedVelocity = 0
+                controller.highlightS = controller.perforation(near: start, in: size)
+            } else {
+                dragMode = .orbiting
             }
-            .onEnded { v in
-                if dragMode == .undecided, hypot(v.translation.width, v.translation.height) < 12 {
-                    controller.touchPaper(at: v.startLocation, in: size)
+        }
+        let delta = CGSize(width: translation.width - lastTranslation.width,
+                           height: translation.height - lastTranslation.height)
+        switch dragMode {
+        case .orbiting:
+            controller.orbit(dx: delta.width, dy: delta.height)
+            lastTranslation = translation
+        case .undecided:
+            let t = translation
+            guard hypot(t.width, t.height) > 12 else { return }
+            if abs(t.width) > abs(t.height) * 1.4 {
+                if let s = controller.highlightS, abs(t.width) > 20 {
+                    dragMode = .tearing
+                    controller.world.cut(atS: s, fromLeft: t.width > 0)
                 }
-                if dragMode == .pulling {
-                    let axis = controller.pullAxis(in: size)
-                    let along = (v.velocity.width * axis.dir.dx + v.velocity.height * axis.dir.dy) / axis.pointsPerMeter
-                    controller.world.feedVelocity = max(0, Float(along)) * 0.5
-                }
+            } else {
+                dragMode = .pulling
                 controller.highlightS = nil
-                dragMode = .idle
+                pullPaper(by: translation, in: size)
+                lastTranslation = translation
             }
+        case .pulling:
+            pullPaper(by: delta, in: size)
+            lastTranslation = translation
+        default:
+            break
+        }
+    }
+
+    private func endDrag(start: CGPoint, translation: CGSize, velocity: CGSize, in size: CGSize) {
+        if dragMode == .undecided, hypot(translation.width, translation.height) < 12 {
+            controller.touchPaper(at: start, in: size)
+        }
+        if dragMode == .pulling {
+            let axis = controller.pullAxis(in: size)
+            let along = (velocity.width * axis.dir.dx + velocity.height * axis.dir.dy) / axis.pointsPerMeter
+            controller.world.feedVelocity = max(0, Float(along)) * 0.5
+        }
+        controller.highlightS = nil
+        dragMode = .idle
     }
 
     private func pullPaper(by delta: CGSize, in size: CGSize) {

@@ -220,7 +220,8 @@ final class PaperWorld {
 
     /// フレームレートに依存しないよう、物理は固定時間刻みで進める。
     func step(_ frameDt: Float) {
-        let dt = min(frameDt, 0.1)
+        // Bound catch-up work so a delayed frame cannot starve mouse and window events.
+        let dt = min(max(frameDt, 0), Self.fixedStep * 4)
         if abs(feedVelocity) > 0.003 {
             feed(feedVelocity * dt)
             feedVelocity *= exp(-dt * 4)

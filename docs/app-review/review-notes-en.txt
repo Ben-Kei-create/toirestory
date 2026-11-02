@@ -1,0 +1,40 @@
+PaperStory for Mac — Review Notes
+
+1. Screen recording and typical flow
+The typical flow is: launch the Mac app -> intro animation -> choose "走れメロス" -> drag the paper downward to read -> cut at a perforation -> switch between text and roll views -> return to the library. The demonstration recording should be captured on a physical Mac running the latest macOS and begin with launching the submitted Mac build.
+
+The app has no account registration, login, account deletion, user-generated content, paid features, or in-app purchases.
+
+2. Purpose and target audience
+PaperStory is a free native macOS reading app for general users interested in Japanese classic literature. A classic story is printed vertically on a roll of paper. Dragging and cutting the paper and rotating the camera create a tactile reading experience with a mouse or trackpad.
+
+3. Access to the main features
+No account, login credentials, purchases, or sample files are required. The Mac app requires macOS 15 or later.
+
+- Launch PaperStory and wait approximately 3 seconds for the intro.
+- Click "走れメロス" (Hashire Merosu / Run, Melos!).
+- Click and drag downward on the paper to read. Scrolling or pressing the Down Arrow key also feeds the paper.
+- Click "ここで切る" (Command-K) to cut at an available perforation. The button is disabled when cutting is unavailable.
+- Click the bottom-right "本文" / "ロール" button (Command-1) to switch views.
+- Drag outside the paper to orbit the camera. Click "視点" (Command-0) to reset its angle.
+- Click the top-left back button (Command-Left Arrow) to return to the library.
+- Click the paper to add a wet mark. Repeated clicks on the same spot can tear it.
+- Reading progress is stored locally on the Mac. The top-right menu includes "最初から読み直す" to restart.
+- The "準備中" entry is disabled and is not a paid or locked feature.
+
+4. External services and data
+This native Mac version does not include Google AdMob, UMP, advertising, authentication, payment processing, analytics, or AI SDKs. We do not operate a backend server. The app does not make network requests.
+
+The story text and visual assets are bundled with the app. Reading progress is stored locally using UserDefaults and is not transmitted to us. The app does not display an App Tracking Transparency prompt.
+
+5. Regional availability
+The Mac app is intended for distribution in Japan only. Its reading features and content do not vary by region.
+
+6. Literary content and attribution
+The app does not provide regulated services. The Japanese original of "Hashire Merosu" by Osamu Dazai (1909–1948) is in the public domain in Japan. It is sourced from Aozora Bunko and used in accordance with its file handling guidelines. Attribution is displayed on the library screen. No other third-party literary content is included.
+
+Work: https://www.aozora.gr.jp/cards/000035/card1567.html
+Handling guidelines: https://www.aozora.gr.jp/guide/kijyunn.html
+
+Support: https://www.givetex.org/apps/paperstory/support/
+Privacy Policy: https://www.givetex.org/apps/paperstory/privacy/

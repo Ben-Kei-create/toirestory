@@ -1,6 +1,6 @@
 import SwiftUI
 import RealityKit
-import UIKit
+import AppKit
 import Observation
 
 struct PaperVertex {
@@ -54,7 +54,7 @@ final class PaperSceneController {
     private(set) var yaw: Float = 0
     private(set) var pitch: Float = 0
     private var isResettingView = false
-    private let impact = UIImpactFeedbackGenerator(style: .rigid)
+    private let impact = NSHapticFeedbackManager.defaultPerformer
 
     /// ミシン目の強調表示(SwiftUI 側のオーバーレイが読む)
     var highlightS: Float?
@@ -72,7 +72,7 @@ final class PaperSceneController {
         let saved = ReadingProgress.load()
         world = PaperWorld(segmentCount: all.count, resumeAt: saved)
         windowStart = Self.windowStart(for: world.sExit, count: all.count)
-        world.onTear = { [weak self] in self?.impact.impactOccurred() }
+        world.onTear = { [weak self] in self?.impact.perform(.generic, performanceTime: .now) }
     }
 
     private static func windowStart(for sExit: Float, count: Int) -> Int {
@@ -97,7 +97,7 @@ final class PaperSceneController {
 
         // 壁
         var wallMat = PhysicallyBasedMaterial()
-        wallMat.baseColor = .init(tint: UIColor(red: 0.95, green: 0.92, blue: 0.86, alpha: 1))
+        wallMat.baseColor = .init(tint: NSColor(red: 0.95, green: 0.92, blue: 0.86, alpha: 1))
         wallMat.roughness = .init(floatLiteral: 1)
         wallMat.metallic = .init(floatLiteral: 0)
         let wall = ModelEntity(mesh: .generatePlane(width: 8, height: 8), materials: [wallMat])
@@ -144,16 +144,16 @@ final class PaperSceneController {
 
     private func buildRollAndHolder(_ content: RealityViewCameraContent) {
         var white = PhysicallyBasedMaterial()
-        white.baseColor = .init(tint: UIColor(red: 0.97, green: 0.96, blue: 0.93, alpha: 1))
+        white.baseColor = .init(tint: NSColor(red: 0.97, green: 0.96, blue: 0.93, alpha: 1))
         white.roughness = .init(floatLiteral: 0.95)
         var line = PhysicallyBasedMaterial()
-        line.baseColor = .init(tint: UIColor(red: 0.62, green: 0.6, blue: 0.56, alpha: 1))
+        line.baseColor = .init(tint: NSColor(red: 0.62, green: 0.6, blue: 0.56, alpha: 1))
         line.roughness = .init(floatLiteral: 1)
         var cardboard = PhysicallyBasedMaterial()
-        cardboard.baseColor = .init(tint: UIColor(red: 0.72, green: 0.58, blue: 0.4, alpha: 1))
+        cardboard.baseColor = .init(tint: NSColor(red: 0.72, green: 0.58, blue: 0.4, alpha: 1))
         cardboard.roughness = .init(floatLiteral: 1)
         var metal = PhysicallyBasedMaterial()
-        metal.baseColor = .init(tint: UIColor(white: 0.78, alpha: 1))
+        metal.baseColor = .init(tint: NSColor(white: 0.78, alpha: 1))
         metal.roughness = .init(floatLiteral: 0.4)
         metal.metallic = .init(floatLiteral: 0.6)
 
@@ -243,7 +243,7 @@ final class PaperSceneController {
                 }
             }
             let image = layer?.snapshot() ?? atlas
-            try? await tex.replace(withImage: image, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
+            try? tex.replace(withImage: image, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
             guard generation == self.layoutGeneration else { return }
             self.windowStart = newStart
             self.atlasImage = atlas
@@ -387,14 +387,14 @@ final class PaperSceneController {
         let px = CGFloat(hit.u) * CGFloat(G.width) * ppm
         let py = CGFloat(windowTopS - hit.s) * ppm
         wet.addBlob(px: px, py: py, radius: CGFloat.random(in: 0.011...0.016) * ppm)
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        impact.perform(.alignment, performanceTime: .now)
         textureDirty = true
         guard !textureUpdateRunning else { return }
         textureUpdateRunning = true
         Task { @MainActor in
             while self.textureDirty, self.wetLayer === wet, let tex = self.paperTexture, let img = wet.snapshot() {
                 self.textureDirty = false
-                try? await tex.replace(withImage: img, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
+                try? tex.replace(withImage: img, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
             }
             self.textureUpdateRunning = false
         }
@@ -567,7 +567,7 @@ final class PaperSceneController {
         ReadingProgress.clear()
         lastSavedS = -1
         world = PaperWorld(segmentCount: segments.count)
-        world.onTear = { [weak self] in self?.impact.impactOccurred() }
+        world.onTear = { [weak self] in self?.impact.perform(.generic, performanceTime: .now) }
         wetSpots = []
         highlightS = nil
         yaw = 0; pitch = 0; isResettingView = false
@@ -585,7 +585,7 @@ final class PaperSceneController {
             guard generation == self.layoutGeneration, let atlas else { return }
             self.atlasImage = atlas
             self.wetLayer = WetPaintLayer(base: atlas)
-            try? await tex.replace(withImage: atlas, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
+            try? tex.replace(withImage: atlas, options: .init(semantic: .color, mipmapsMode: .allocateAndGenerateAll))
         }
     }
 }

@@ -10,7 +10,6 @@ struct AppRootView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingIntro = true
     @State private var reading = false
-    @State private var advertising = AdvertisingController()
 
     var body: some View {
         ZStack {
@@ -23,11 +22,6 @@ struct AppRootView: View {
             } else {
                 storySelection
                     .transition(.opacity)
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !showingIntro {
-                AdMobBannerBar(controller: advertising)
             }
         }
         .animation(.easeInOut(duration: reduceMotion ? 0 : 0.3), value: showingIntro)
@@ -71,9 +65,9 @@ struct AppRootView: View {
                     .foregroundStyle(.secondary)
                     .padding(.top, 20)
             }
-            .frame(maxWidth: 480, alignment: .leading)
+            .frame(maxWidth: 560, alignment: .leading)
             .padding(.horizontal, 28)
-            .padding(.top, 68)
+            .padding(.top, 44)
             .padding(.bottom, 40)
             .frame(maxWidth: .infinity)
         }

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Shared dimensions (metres, scene units). The paper hangs in the plane z = frontZ.
-enum PaperGeometry {
+nonisolated enum PaperGeometry {
     static let cols = 7
     static let width: Float = 0.20
     static let pitch: Float = width / Float(cols - 1)

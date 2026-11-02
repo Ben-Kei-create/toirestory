@@ -1,28 +1,34 @@
-# paperstory
+# PaperStory for Mac
 
-紙を引き出して物語を読むiOSアプリ。
-
-読書画面の右下で「本文」「ロール」を切り替えられます。
-本文表示ではロールとホルダーを隠して紙を拡大します。
-切り替えても、引き出した紙・切断・染みの状態は保持されます。
+巻紙を下へドラッグして『走れメロス』を読む、macOS専用アプリです。
+macOS 15以降に対応します。
 
 ## 開発
 
-`paperstory.xcodeproj` をXcodeで開き、`paperstory` スキームを実行します。
-Google Mobile Ads SDKはSwift Package Managerで取得します。
+`paperstory.xcodeproj` をXcodeで開き、`paperstory` スキームの実行先に「My Mac」を選びます。
+標準ウィンドウは900×820pt、最小サイズは640×700ptです。
+物理演算の応答を保つため、DebugでもSwiftの最適化を有効にしています。
 
-## 広告
+```sh
+xcodebuild -project paperstory.xcodeproj -scheme paperstory -destination 'platform=macOS' -configuration Debug build
+```
 
-ライブラリと読書画面の下部に320×50ptのAdMobバナーを表示します。
-操作欄とは別のセーフエリアに配置し、起動演出中は表示しません。
+## 操作
 
-- DebugはGoogle公式のテスト広告ユニットIDを使用します。
-- Releaseは登録済みの本番アプリID・広告ユニットIDを使用します。
-- IDの設定場所はターゲットのBuild Settings内の `ADMOB_APP_ID` と `ADMOB_BANNER_AD_UNIT_ID` です。
-- UMPで広告の同意状態を更新し、必要なフォームを表示してから広告を読み込みます。
-  必要な地域向けのメッセージはAdMob管理画面の「プライバシーとメッセージ」で設定してください。
-- 同意状態や通信エラーで広告を取得できない場合は、広告枠だけを残します。
+- 紙を下へドラッグ、スクロール、または下矢印キーで本文を繰り出します。
+- 「ここで切る」でミシン目を切れます（⌘K）。
+- 紙の外をドラッグすると視点が回り、「視点」で戻せます（⌘0）。
+- 右下の「本文」「ロール」で表示を切り替えます（⌘1）。
+- 左上の戻るボタンで作品選択へ戻ります（⌘←）。
+- 紙をクリックすると濡れた跡がつき、同じ箇所を繰り返しクリックすると破れます。
+- 引き出した位置は端末内に保存します。右上のメニューから最初に戻せます。
 
-参考: [公式セットアップ](https://developers.google.com/admob/ios/quick-start)、
-[バナー広告](https://developers.google.com/admob/ios/banner)、
-[UMP](https://developers.google.com/admob/ios/privacy)。
+## 配布と広告
+
+Macネイティブ版はGoogle Mobile Ads / UMPを使用せず、広告枠も表示しません。
+外部SDK依存や、アプリから外部へ通信する処理はありません。
+iOS向けのAdMob設定・SDK依存は取り除いています。
+
+App Store ConnectではPaperStoryにmacOSプラットフォームを追加し、Mac用ビルドを提出します。
+審査資料は `docs/app-review/` を参照してください。
+サポートページとプライバシーポリシーのWeb上の説明も、Mac版の内容へ更新が必要です。

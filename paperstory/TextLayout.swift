@@ -14,7 +14,7 @@ enum Story {
     static let opening = "メロスは激怒した。必ず、かの邪智暴虐の王を除かなければならぬと決意した。メロスには政治がわからぬ。メロスは、村の牧人である。笛を吹き、羊と遊んで暮して来た。けれども邪悪に対しては、人一倍に敏感であった。"
 }
 
-enum TextLayout {
+nonisolated enum TextLayout {
     static let charsPerSegment = 20
     static let maxSegmentChars = 22
     private static let noLineStart: Set<Character> = ["。", "、", "」", "』", "）", "！", "？", "…", "ー"]
