@@ -59,6 +59,12 @@
       "size": "512x512",
       "scale": "2x",
       "filename": "icon-1024.png"
+    },
+    {
+      "filename": "icon-1024.png",
+      "idiom": "universal",
+      "platform": "ios",
+      "size": "1024x1024"
     }
   ],
   "info": {

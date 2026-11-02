@@ -1,6 +1,12 @@
 import SwiftUI
 import RealityKit
+#if os(macOS)
 import AppKit
+private typealias PaperPlatformColor = NSColor
+#else
+import UIKit
+private typealias PaperPlatformColor = UIColor
+#endif
 import Observation
 
 struct PaperVertex {
@@ -54,7 +60,6 @@ final class PaperSceneController {
     private(set) var yaw: Float = 0
     private(set) var pitch: Float = 0
     private var isResettingView = false
-    private let impact = NSHapticFeedbackManager.defaultPerformer
 
     /// ミシン目の強調表示(SwiftUI 側のオーバーレイが読む)
     var highlightS: Float?
@@ -72,7 +77,7 @@ final class PaperSceneController {
         let saved = ReadingProgress.load()
         world = PaperWorld(segmentCount: all.count, resumeAt: saved)
         windowStart = Self.windowStart(for: world.sExit, count: all.count)
-        world.onTear = { [weak self] in self?.impact.perform(.generic, performanceTime: .now) }
+        world.onTear = { [weak self] in self?.playTearFeedback() }
     }
 
     private static func windowStart(for sExit: Float, count: Int) -> Int {
@@ -97,7 +102,7 @@ final class PaperSceneController {
 
         // 壁
         var wallMat = PhysicallyBasedMaterial()
-        wallMat.baseColor = .init(tint: NSColor(red: 0.95, green: 0.92, blue: 0.86, alpha: 1))
+        wallMat.baseColor = .init(tint: PaperPlatformColor(red: 0.95, green: 0.92, blue: 0.86, alpha: 1))
         wallMat.roughness = .init(floatLiteral: 1)
         wallMat.metallic = .init(floatLiteral: 0)
         let wall = ModelEntity(mesh: .generatePlane(width: 8, height: 8), materials: [wallMat])
@@ -144,16 +149,16 @@ final class PaperSceneController {
 
     private func buildRollAndHolder(_ content: RealityViewCameraContent) {
         var white = PhysicallyBasedMaterial()
-        white.baseColor = .init(tint: NSColor(red: 0.97, green: 0.96, blue: 0.93, alpha: 1))
+        white.baseColor = .init(tint: PaperPlatformColor(red: 0.97, green: 0.96, blue: 0.93, alpha: 1))
         white.roughness = .init(floatLiteral: 0.95)
         var line = PhysicallyBasedMaterial()
-        line.baseColor = .init(tint: NSColor(red: 0.62, green: 0.6, blue: 0.56, alpha: 1))
+        line.baseColor = .init(tint: PaperPlatformColor(red: 0.62, green: 0.6, blue: 0.56, alpha: 1))
         line.roughness = .init(floatLiteral: 1)
         var cardboard = PhysicallyBasedMaterial()
-        cardboard.baseColor = .init(tint: NSColor(red: 0.72, green: 0.58, blue: 0.4, alpha: 1))
+        cardboard.baseColor = .init(tint: PaperPlatformColor(red: 0.72, green: 0.58, blue: 0.4, alpha: 1))
         cardboard.roughness = .init(floatLiteral: 1)
         var metal = PhysicallyBasedMaterial()
-        metal.baseColor = .init(tint: NSColor(white: 0.78, alpha: 1))
+        metal.baseColor = .init(tint: PaperPlatformColor(white: 0.78, alpha: 1))
         metal.roughness = .init(floatLiteral: 0.4)
         metal.metallic = .init(floatLiteral: 0.6)
 
@@ -186,6 +191,22 @@ final class PaperSceneController {
             holderRoot.addChild(arm)
         }
         content.add(holderRoot)
+    }
+
+    private func playTearFeedback() {
+        #if os(macOS)
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        #else
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        #endif
+    }
+
+    private func playTouchFeedback() {
+        #if os(macOS)
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        #else
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        #endif
     }
 
     // MARK: - 毎フレーム
@@ -387,7 +408,7 @@ final class PaperSceneController {
         let px = CGFloat(hit.u) * CGFloat(G.width) * ppm
         let py = CGFloat(windowTopS - hit.s) * ppm
         wet.addBlob(px: px, py: py, radius: CGFloat.random(in: 0.011...0.016) * ppm)
-        impact.perform(.alignment, performanceTime: .now)
+        playTouchFeedback()
         textureDirty = true
         guard !textureUpdateRunning else { return }
         textureUpdateRunning = true
@@ -567,7 +588,7 @@ final class PaperSceneController {
         ReadingProgress.clear()
         lastSavedS = -1
         world = PaperWorld(segmentCount: segments.count)
-        world.onTear = { [weak self] in self?.impact.perform(.generic, performanceTime: .now) }
+        world.onTear = { [weak self] in self?.playTearFeedback() }
         wetSpots = []
         highlightS = nil
         yaw = 0; pitch = 0; isResettingView = false

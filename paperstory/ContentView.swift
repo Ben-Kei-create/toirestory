@@ -25,6 +25,7 @@ struct ContentView: View {
                         await controller.setup(content)
                     }
                     .allowsHitTesting(false)
+                    #if os(macOS)
                     PaperInputSurface(
                         onChanged: { start, translation in
                             updateDrag(start: start, translation: translation, in: geo.size)
@@ -38,6 +39,17 @@ struct ContentView: View {
                             pullPaper(by: CGSize(width: axis.dir.dx * distance, height: axis.dir.dy * distance), in: geo.size)
                         }
                     )
+                    #else
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .gesture(DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                updateDrag(start: value.startLocation, translation: value.translation, in: geo.size)
+                            }
+                            .onEnded { value in
+                                endDrag(start: value.startLocation, translation: value.translation, velocity: value.velocity, in: geo.size)
+                            })
+                    #endif
                     perforationOverlay
                         .allowsHitTesting(false)
                     if controller.viewMode == .reading {
@@ -90,9 +102,17 @@ struct ContentView: View {
         hasPulled = false
     }
 
+    private var pullHint: String {
+        #if os(macOS)
+        "下へドラッグして読む"
+        #else
+        "下へ引いて読む"
+        #endif
+    }
+
     private var readingControls: some View {
         VStack(spacing: 12) {
-            Text("下へドラッグして読む")
+            Text(pullHint)
                 .font(.subheadline)
                 .foregroundStyle(ink.opacity(0.75))
                 .opacity(hasPulled ? 0 : 1)

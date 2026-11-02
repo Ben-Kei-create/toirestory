@@ -2,9 +2,9 @@ Hello App Review Team,
 
 Thank you for your feedback regarding PaperStory.
 
-We have changed the product to a native macOS-only app and will not resubmit the iOS version. We will submit the macOS version with its own Mac build, screenshots, screen recording, and review notes covering the requested six items.
+PaperStory supports both iPhone and Mac. We are retaining the iPhone version alongside the native Mac version. We will provide the appropriate physical-device recording and platform-specific review information for each submission.
 
-The Mac app has no advertising SDK, account registration, login, user-generated content, paid features, or in-app purchases. The story is bundled locally and reading progress is saved on the Mac.
+The iPhone version uses Google AdMob and UMP for advertising and consent. The native Mac version does not display ads. Both versions bundle the story locally and save reading progress on the device. Neither version has account creation, login, user-generated content, paid features, or in-app purchases.
 
 Best regards,
 PaperStory

@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import AppKit
 
@@ -86,3 +87,5 @@ final class PaperInputView: NSView {
         }
     }
 }
+
+#endif
